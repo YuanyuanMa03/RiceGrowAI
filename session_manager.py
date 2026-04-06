@@ -36,6 +36,15 @@ VALID_SESSION_KEYS = {
     'custom_秸秆数据_csv_encoding',
     'custom_管理数据_多种方案_csv_encoding',
     'custom_施肥数据_csv_encoding',
+
+    # AI 功能
+    'ai_chat_history',
+    'ai_api_key',
+    'ai_model',
+    'ai_provider',
+    'ai_recommendation',
+    'ai_analysis_report',
+    'current_page',
 }
 
 # 临时session state键（应在模拟后清理）
@@ -54,6 +63,12 @@ def init_session_state() -> None:
         'omn': 1600.0,
         'use_custom_files': True,
         'run_simulation': False,
+        'ai_chat_history': [],
+        'ai_model': 'glm-4.5-flash',
+        'ai_provider': 'zhipu',
+        'ai_recommendation': None,
+        'ai_analysis_report': None,
+        'current_page': 'simulation',
     }
 
     for key, value in defaults.items():

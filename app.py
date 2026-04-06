@@ -38,6 +38,15 @@ from session_manager import (
 # ===== 简化调参模块 =====
 from calibration_page import show_simple_calibration_page
 
+# ===== AI 智能功能模块 =====
+try:
+    from ai.client import OPENAI_AVAILABLE, PROVIDERS, get_provider_model_ids, get_model_display_name
+    from ai.ui.assistant_page import show_ai_assistant_page
+    from ai.ui.recommendation_panel import render_recommendation_panel
+    from ai.ui.analysis_tab import render_ai_analysis_tab
+except ImportError:
+    OPENAI_AVAILABLE = False
+
 # ===== 企业级配置模块导入 =====
 from config import (
     PROJECT_ROOT,
@@ -2534,6 +2543,62 @@ def show_sidebar_content(cultivar_df):
         </div>
         """, unsafe_allow_html=True)
 
+    # ===== AI 助手设置 =====
+    if OPENAI_AVAILABLE:
+        with st.expander("AI 助手设置", expanded=False):
+            st.markdown("""
+            <div style="font-size:0.75rem; color:#6B7280; margin-bottom:0.5rem;">
+                配置 AI 模型提供商和 API Key 以启用智能功能
+            </div>
+            """, unsafe_allow_html=True)
+
+            # 提供商选择
+            provider_keys = list(PROVIDERS.keys())
+            provider_names = [PROVIDERS[k]["name"] for k in provider_keys]
+            current_provider = st.session_state.get("ai_provider", "zhipu")
+            provider_idx = provider_keys.index(current_provider) if current_provider in provider_keys else 0
+
+            selected_provider = st.selectbox(
+                "AI 提供商",
+                provider_keys,
+                format_func=lambda k: PROVIDERS[k]["name"],
+                index=provider_idx,
+                key="select_ai_provider",
+            )
+            st.session_state["ai_provider"] = selected_provider
+
+            # API Key 输入
+            api_key = st.text_input(
+                "API Key",
+                type="password",
+                value=st.session_state.get("ai_api_key", ""),
+                key="input_ai_api_key",
+                help=f"输入 {PROVIDERS[selected_provider]['name']} API Key，仅存储在当前会话中",
+            )
+            if api_key:
+                st.session_state["ai_api_key"] = api_key
+
+            # 模型选择（根据提供商动态变化）
+            model_ids = get_provider_model_ids(selected_provider)
+            current_model = st.session_state.get("ai_model", model_ids[0] if model_ids else "")
+            model_idx = model_ids.index(current_model) if current_model in model_ids else 0
+
+            selected_model = st.selectbox(
+                "AI 模型",
+                model_ids,
+                format_func=lambda mid: get_model_display_name(selected_provider, mid),
+                index=model_idx,
+                key="select_ai_model",
+            )
+            st.session_state["ai_model"] = selected_model
+
+            if st.session_state.get("ai_api_key"):
+                display = get_model_display_name(selected_provider, selected_model)
+                st.success(f"已配置: {display} ({PROVIDERS[selected_provider]['name']})")
+            else:
+                st.info("输入 API Key 以启用 AI 助手、参数推荐和结果分析")
+
+
 def run_single_variety_simulation(
     cultivar_params: Tuple[float, ...],
     variety_name: str,
@@ -2792,11 +2857,12 @@ def display_simulation_results(results: List[Optional[Dict[str, Any]]]) -> None:
         """, unsafe_allow_html=True)
 
         # 使用标签页组织不同类型的图表
-        tab1, tab2, tab3, tab4 = st.tabs([
+        tab1, tab2, tab3, tab4, tab5 = st.tabs([
             "📈 产量对比",
             "💨 CH4排放",
             "⚖️ 效率分析",
-            "🎯 综合评分"
+            "🎯 综合评分",
+            "🤖 AI分析"
         ])
 
         with tab1:
@@ -3301,6 +3367,17 @@ def display_simulation_results(results: List[Optional[Dict[str, Any]]]) -> None:
                         st.subheader("💨 CH4排放数据")
                         st.dataframe(selected_result['ch4_data'], use_container_width=True)
 
+        # ===== AI 分析标签页 =====
+        with tab5:
+            simulation_params = {
+                "varieties": st.session_state.get("selected_varieties", []),
+                "water_regime": st.session_state.get("water_regime", 1),
+                "sand_value": st.session_state.get("sand_value", 35.0),
+                "oms": st.session_state.get("oms", 1300.0),
+                "omn": st.session_state.get("omn", 1600.0),
+            }
+            render_ai_analysis_tab(results, simulation_params)
+
 # 主程序
 if __name__ == "__main__":
     # ===== 页面选择器 =====
@@ -3346,7 +3423,7 @@ if __name__ == "__main__":
         st.session_state['current_page'] = 'simulation'
 
     # 页面选择按钮
-    col1, col2 = st.columns(2)
+    col1, col2, col3 = st.columns(3)
 
     with col1:
         if st.button(
@@ -3366,11 +3443,25 @@ if __name__ == "__main__":
             st.session_state['current_page'] = 'calibration'
             st.rerun()
 
+    with col3:
+        ai_label = "🤖 AI 助手" if OPENAI_AVAILABLE else "🤖 AI 助手 (需安装openai)"
+        if st.button(
+            ai_label,
+            use_container_width=True,
+            type="primary" if st.session_state['current_page'] == 'ai_assistant' else "secondary"
+        ):
+            st.session_state['current_page'] = 'ai_assistant'
+            st.rerun()
+
     # 根据选择的页面显示不同内容
     if st.session_state['current_page'] == 'calibration':
         # 显示自动校准页面（使用简化版本）
         show_simple_calibration_page()
         st.stop()  # 停止执行，不继续执行模拟运行代码
+
+    if st.session_state['current_page'] == 'ai_assistant':
+        show_ai_assistant_page()
+        st.stop()
 
     # 以下是模拟运行页面的原有代码
     base_dir = PROJECT_ROOT  # 使用config中的PROJECT_ROOT
@@ -3403,6 +3494,10 @@ if __name__ == "__main__":
     oms = st.session_state.get('oms', 1300)
     omn = st.session_state.get('omn', 1600)
     run_simulation = st.session_state.get('run_simulation', False)
+
+    # AI 参数推荐面板（仅在有 API key 时显示）
+    if OPENAI_AVAILABLE:
+        render_recommendation_panel(cultivar_df=cultivar_df)
 
     # 运行模拟
     if run_simulation and selected_varieties:
