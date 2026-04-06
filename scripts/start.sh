@@ -4,8 +4,10 @@
 # 用法: ./start.sh
 
 PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-TUNNEL_NAME="rice-simulation"
-CONFIG_FILE="$HOME/.cloudflared/$TUNNEL_NAME.yml"
+
+# Cloudflare Tunnel Token (从 Cloudflare Zero Trust Dashboard 获取)
+# 设置环境变量: export TUNNEL_TOKEN="your-token-here"
+TUNNEL_TOKEN="${TUNNEL_TOKEN:-}"
 
 cd $PROJECT_DIR
 
@@ -22,10 +24,13 @@ else
     echo "✅ Streamlit已在运行"
 fi
 
-# 启动Cloudflare Tunnel
-if ! pgrep -f "cloudflared tunnel.*$TUNNEL_NAME" > /dev/null; then
+# 启动Cloudflare Tunnel (Token方式)
+if [ -z "$TUNNEL_TOKEN" ]; then
+    echo "⚠️  TUNNEL_TOKEN 未设置，跳过 Tunnel 启动"
+    echo "   设置方法: export TUNNEL_TOKEN=\"your-token\""
+elif ! pgrep -f "cloudflared tunnel run --token" > /dev/null; then
     echo "启动 Cloudflare Tunnel..."
-    nohup cloudflared tunnel --config "$CONFIG_FILE" run > /tmp/tunnel.log 2>&1 &
+    nohup cloudflared tunnel run --token "$TUNNEL_TOKEN" > /tmp/tunnel.log 2>&1 &
     TUNNEL_PID=$!
     echo $TUNNEL_PID > /tmp/rice-tunnel.pid
     echo "✅ Cloudflare Tunnel已启动 (PID: $TUNNEL_PID)"
