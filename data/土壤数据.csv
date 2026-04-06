@@ -1,0 +1,3 @@
+pH,depth,thickness,bulkWeight,clayParticle,actualWater,fieldCapacity,wiltingPoint,fieldSaturation,organicMatter,totaNitrogen,nitrateNitrogen,ammoniaNitrogen,fastAvailablePhosphorus,totalPhosphorus,fastAvailableK,slowAvailableK,caco3,soilTexture,soilMineRate,soilNConcentration
+6.87,20,20,1.37,0.34,0.16,0.32,0.14,0.417,16.5,1.5,25,1.1,20.2,1.206,233.5,941,0.003,中壤土,2.15,6.18
+6.87,40,20,1.37,0.34,0.15,0.32,0.14,0.417,16.5,1.5,25,1.1,20.2,1.206,233.5,941,0.003,中壤土,2.15,6.18
