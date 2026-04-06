@@ -22,19 +22,24 @@ except ImportError:
 PROVIDERS = {
     "zhipu": {
         "name": "智谱AI (ZhipuAI)",
-        "base_url": "https://open.bigmodel.cn/api/coding/paas/v4",
+        "base_url": "https://open.bigmodel.cn/api/paas/v4",
         "models": [
-            {"id": "glm-5",           "name": "GLM-5",           "reasoning": True},
-            {"id": "glm-5-turbo",     "name": "GLM-5 Turbo",     "reasoning": True},
-            {"id": "glm-4.7",         "name": "GLM-4.7",         "reasoning": True},
-            {"id": "glm-4.7-flash",   "name": "GLM-4.7 Flash",   "reasoning": True},
-            {"id": "glm-4.7-flashx",  "name": "GLM-4.7 FlashX",  "reasoning": True},
-            {"id": "glm-4.6",         "name": "GLM-4.6",         "reasoning": True},
-            {"id": "glm-4.6v",        "name": "GLM-4.6V (视觉)", "reasoning": True},
-            {"id": "glm-4.5",         "name": "GLM-4.5",         "reasoning": True},
-            {"id": "glm-4.5-air",     "name": "GLM-4.5 Air",     "reasoning": True},
-            {"id": "glm-4.5-flash",   "name": "GLM-4.5 Flash (免费)", "reasoning": True},
-            {"id": "glm-4.5v",        "name": "GLM-4.5V (视觉)", "reasoning": True},
+            # ---- GLM-5 系列 ----
+            {"id": "glm-5",           "name": "GLM-5 (旗舰)",         "tags": ["reasoning"]},
+            {"id": "glm-5-turbo",     "name": "GLM-5 Turbo",          "tags": ["reasoning"]},
+            # ---- GLM-4.7 系列 ----
+            {"id": "glm-4.7",         "name": "GLM-4.7",              "tags": ["reasoning"]},
+            {"id": "glm-4.7-flash",   "name": "GLM-4.7 Flash",        "tags": ["reasoning"]},
+            {"id": "glm-4.7-flashx",  "name": "GLM-4.7 FlashX",       "tags": ["reasoning"]},
+            # ---- GLM-4.6 系列 ----
+            {"id": "glm-4.6",         "name": "GLM-4.6",              "tags": ["reasoning"]},
+            {"id": "glm-4.6v",        "name": "GLM-4.6V (视觉)",      "tags": ["reasoning", "vision"]},
+            {"id": "glm-4.6v-flash",  "name": "GLM-4.6V Flash (免费·视觉)", "tags": ["reasoning", "vision", "free"]},
+            # ---- GLM-4.5 系列 ----
+            {"id": "glm-4.5",         "name": "GLM-4.5",              "tags": ["reasoning"]},
+            {"id": "glm-4.5-air",     "name": "GLM-4.5 Air",          "tags": ["reasoning"]},
+            {"id": "glm-4.5-flash",   "name": "GLM-4.5 Flash (免费)",  "tags": ["reasoning", "free"]},
+            {"id": "glm-4.5v",        "name": "GLM-4.5V (视觉)",      "tags": ["reasoning", "vision"]},
         ],
     },
     "openai": {

@@ -3655,10 +3655,17 @@ if __name__ == "__main__":
         """, unsafe_allow_html=True)
 
         # 显示结果
+        st.session_state['simulation_results_cache'] = results
         display_simulation_results(results)
 
         # 重置运行状态
         st.session_state['run_simulation'] = False
+
+    # 从缓存恢复上次模拟结果（解决按钮点击后 rerun 丢失结果的问题）
+    elif not run_simulation and st.session_state.get('simulation_results_cache'):
+        cached_results = st.session_state['simulation_results_cache']
+        if any(r is not None for r in cached_results):
+            display_simulation_results(cached_results)
 
     # 现代应用信息页脚 - 博客风格
     st.markdown("""
