@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import os
 import time
+import tempfile
 import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime
@@ -2649,7 +2650,9 @@ def run_single_variety_simulation(
 
     full_cultivar_data = [variety_name] + list(cultivar_params)
     cultivar_df_temp = pd.DataFrame([full_cultivar_data], columns=cultivar_columns)
-    CultivarPath = str(PROJECT_ROOT / f"temp_{variety_name}_cultivar.csv")
+    _fd, _tpath = tempfile.mkstemp(suffix=f"_{variety_name}_cultivar.csv", prefix="rch4_")
+    os.close(_fd)
+    CultivarPath = _tpath
 
     logger.info(f"创建临时品种文件: {CultivarPath}")
 

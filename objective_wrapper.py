@@ -7,6 +7,8 @@ import numpy as np
 from typing import Dict, Any, Optional
 from pathlib import Path
 import sys
+import os
+import tempfile
 import logging
 
 logger = logging.getLogger('rice_app')
@@ -200,40 +202,49 @@ class ObjectiveWrapper:
             cultivar_df.insert(0, 'PZ', 'Optimized_Variety')
 
             # 保存临时品种参数文件
-            temp_cultivar_path = PROJECT_ROOT / 'uploads' / 'temp_cultivar.csv'
+            fd, tmp = tempfile.mkstemp(suffix='_cultivar.csv', prefix='rch4_wrap_')
+            os.close(fd)
+            temp_cultivar_path = Path(tmp)
             cultivar_df.to_csv(temp_cultivar_path, index=False, encoding='gbk')
 
-            # 调用Ricegrow模型
-            results = CalFun(
-                FieldPath=str(DATA_DIR / '调参数据.csv'),
-                WeatherPath=str(DATA_DIR / '气象数据.csv'),
-                SoilFieldPath=str(DATA_DIR / '土壤数据.csv'),
-                ResiduePath=str(DATA_DIR / '秸秆数据.csv'),
-                PlantingPath=str(DATA_DIR / '管理数据_多种方案.csv'),
-                CultivarPath=str(temp_cultivar_path),
-                FertilizerPath=str(DATA_DIR / '施肥数据.csv')
-            )
+            try:
+                # 调用Ricegrow模型
+                results = CalFun(
+                    FieldPath=str(DATA_DIR / '调参数据.csv'),
+                    WeatherPath=str(DATA_DIR / '气象数据.csv'),
+                    SoilFieldPath=str(DATA_DIR / '土壤数据.csv'),
+                    ResiduePath=str(DATA_DIR / '秸秆数据.csv'),
+                    PlantingPath=str(DATA_DIR / '管理数据_多种方案.csv'),
+                    CultivarPath=str(temp_cultivar_path),
+                    FertilizerPath=str(DATA_DIR / '施肥数据.csv')
+                )
 
-            # 验证结果
-            if results is None or len(results) < 8:
-                raise ValueError(f"Ricegrow模型返回结果异常: results={results}")
+                # 验证结果
+                if results is None or len(results) < 8:
+                    raise ValueError(f"Ricegrow模型返回结果异常: results={results}")
 
-            # 检查结果长度
-            expected_length = len(results[4]) if hasattr(results[4], '__len__') else 0
-            if expected_length == 0:
-                raise ValueError("Ricegrow模型返回空结果，可能是参数不合理导致模拟失败")
+                # 检查结果长度
+                expected_length = len(results[4]) if hasattr(results[4], '__len__') else 0
+                if expected_length == 0:
+                    raise ValueError("Ricegrow模型返回空结果，可能是参数不合理导致模拟失败")
 
-            # 构造结果DataFrame
-            ricegrow_df = pd.DataFrame({
-                'DAT': range(1, len(results[4]) + 1),
-                'W': results[4],      # ATOPWTSeq - 地上部生物量
-                'Wroot': results[0],  # AROOTWTSeq - 根系生物量
-                'LAI': results[5],    # LAISeq - 叶面积指数
-                'YIELD': results[7],  # YIELDSeq - 产量
-            })
+                # 构造结果DataFrame
+                ricegrow_df = pd.DataFrame({
+                    'DAT': range(1, len(results[4]) + 1),
+                    'W': results[4],      # ATOPWTSeq - 地上部生物量
+                    'Wroot': results[0],  # AROOTWTSeq - 根系生物量
+                    'LAI': results[5],    # LAISeq - 叶面积指数
+                    'YIELD': results[7],  # YIELDSeq - 产量
+                })
 
-            logger.debug(f"Ricegrow模型运行完成: {len(ricegrow_df)} 天")
-            return ricegrow_df
+                logger.debug(f"Ricegrow模型运行完成: {len(ricegrow_df)} 天")
+                return ricegrow_df
+            finally:
+                # 确保清理临时文件
+                try:
+                    temp_cultivar_path.unlink()
+                except Exception:
+                    pass
 
         except FileNotFoundError as e:
             logger.error(f"数据文件未找到: {e}")

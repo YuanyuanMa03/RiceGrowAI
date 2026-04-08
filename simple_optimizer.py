@@ -3,6 +3,8 @@
 支持多种优化算法：随机采样、遗传算法、差分进化、贝叶斯优化
 """
 import sys
+import os
+import tempfile
 import numpy as np
 import pandas as pd
 from pathlib import Path
@@ -115,7 +117,9 @@ class SimpleParameterOptimizer:
         }
 
         df = pd.DataFrame([default_params])
-        temp_path = PROJECT_ROOT / 'uploads' / 'temp_cultivar.csv'
+        fd, tmp = tempfile.mkstemp(suffix='_cultivar.csv', prefix='rch4_opt_')
+        os.close(fd)
+        temp_path = Path(tmp)
         df.to_csv(temp_path, index=False, encoding='gbk')
         return temp_path
 
