@@ -13,21 +13,45 @@ import warnings
 import numpy as np
 import pandas as pd
 
-# 抑制 PyMC 的警告
-warnings.filterwarnings('ignore', category=UserWarning)
-warnings.filterwarnings('ignore', category=FutureWarning)
-
 logger = logging.getLogger('rice_app')
+
+# PyMC/pytensor 会产生大量 UserWarning，仅在需要时局部抑制
+_PMC_WARNING_CATEGORIES = (UserWarning, FutureWarning)
 
 # 尝试导入 PyMC 和 ArviZ
 try:
     import pymc as pm
     import arviz as az
+    import pytensor.tensor as pt
+    from pytensor.graph.op import Op
     PYMC_AVAILABLE = True
 except ImportError:
     PYMC_AVAILABLE = False
+    pm = None
+    az = None
+    pt = None
+    Op = None
     logger.warning("PyMC 或 ArviZ 未安装。MCMC 调参功能将不可用。"
                    "请运行: pip install pymc arviz")
+
+
+if PYMC_AVAILABLE:
+    class _BlackBoxLogLikelihoodOp(Op):
+        """PyTensor Op wrapping a black-box log-likelihood function.
+
+        This allows PyMC's NUTS sampler to call a pure-Python model
+        (which pytensor cannot trace symbolically) during sampling.
+        """
+        itypes = [pt.dvector]
+        otypes = [pt.dscalar]
+
+        def __init__(self, logp_fn: Callable):
+            self._logp_fn = logp_fn
+
+        def perform(self, node, inputs, output_storage):
+            param_values = inputs[0]
+            result = self._logp_fn(param_values)
+            output_storage[0][0] = np.asarray(result, dtype=np.float64)
 
 
 class MCMCCalibrator:
@@ -176,71 +200,70 @@ class MCMCCalibrator:
         # 创建模型上下文
         model_context = pm.Model()
 
-        with model_context:
-            # 1. 添加参数先验
-            priors = {}
-            for param in params_to_calibrate:
-                if param not in self.param_priors:
-                    logger.warning(f"参数 {param} 没有定义先验，使用默认 Uniform(0,1)")
-                    priors[param] = pm.Uniform(param, lower=0, upper=1)
-                    continue
+        # 局部抑制 PyMC 构建时的警告，不影响全局
+        with warnings.catch_warnings():
+            warnings.filterwarnings('ignore', category=_PMC_WARNING_CATEGORIES)
 
-                config = self.param_priors[param]
-                dist_type = config['dist']
+            with model_context:
+                # 1. 添加参数先验
+                priors = {}
+                for param in params_to_calibrate:
+                    if param not in self.param_priors:
+                        logger.warning(f"参数 {param} 没有定义先验，使用默认 Uniform(0,1)")
+                        priors[param] = pm.Uniform(param, lower=0, upper=1)
+                        continue
 
-                if dist_type == 'TruncatedNormal':
-                    priors[param] = pm.TruncatedNormal(
-                        param,
-                        mu=config['mu'],
-                        sigma=config['sigma'],
-                        lower=config['lower'],
-                        upper=config['upper']
-                    )
-                elif dist_type == 'Uniform':
-                    priors[param] = pm.Uniform(
-                        param,
-                        lower=config['lower'],
-                        upper=config['upper']
-                    )
-                elif dist_type == 'HalfNormal':
-                    priors[param] = pm.HalfNormal(
-                        param,
-                        sigma=config.get('sigma', 1.0)
-                    )
-                else:
-                    # 默认使用 Uniform
-                    priors[param] = pm.Uniform(
-                        param,
-                        lower=config.get('lower', 0),
-                        upper=config.get('upper', 1)
-                    )
+                    config = self.param_priors[param]
+                    dist_type = config['dist']
 
-            # 2. 添加确定性节点（运行模型）
-            # 注意：由于模型运行是纯 Python 函数，需要使用自定义 Op
-            # 这里使用简化的方法：在采样时运行模型
-            self._priors = priors
+                    if dist_type == 'TruncatedNormal':
+                        priors[param] = pm.TruncatedNormal(
+                            param,
+                            mu=config['mu'],
+                            sigma=config['sigma'],
+                            lower=config['lower'],
+                            upper=config['upper']
+                        )
+                    elif dist_type == 'Uniform':
+                        priors[param] = pm.Uniform(
+                            param,
+                            lower=config['lower'],
+                            upper=config['upper']
+                        )
+                    elif dist_type == 'HalfNormal':
+                        priors[param] = pm.HalfNormal(
+                            param,
+                            sigma=config.get('sigma', 1.0)
+                        )
+                    else:
+                        priors[param] = pm.Uniform(
+                            param,
+                            lower=config.get('lower', 0),
+                            upper=config.get('upper', 1)
+                        )
 
-            # 3. 准备观测数据
-            # 首先使用先验均值运行一次模型获取数据格式
-            test_params = {}
-            for k in params_to_calibrate:
-                config = self.param_priors.get(k, {})
-                if 'mu' in config:
-                    test_params[k] = config['mu']
-                elif 'lower' in config and 'upper' in config:
-                    test_params[k] = (config['lower'] + config['upper']) / 2
-                else:
-                    test_params[k] = 0.5  # 默认值
-            test_params.update(self.fixed_params)
+                # 2. 保存先验引用供似然函数使用
+                self._priors = priors
 
-            obs_arrays, _ = self._prepare_data_for_model(test_params)
+                # 3. 用先验均值运行一次模型，获取观测数据格式
+                test_params = {}
+                for k in params_to_calibrate:
+                    config = self.param_priors.get(k, {})
+                    if 'mu' in config:
+                        test_params[k] = config['mu']
+                    elif 'lower' in config and 'upper' in config:
+                        test_params[k] = (config['lower'] + config['upper']) / 2
+                    else:
+                        test_params[k] = 0.5
+                test_params.update(self.fixed_params)
 
-            if obs_arrays is None:
-                raise ValueError("无法使用先验均值运行模型，请检查模型配置")
+                obs_arrays, _ = self._prepare_data_for_model(test_params)
 
-            # 4. 添加似然
-            # 由于模拟值依赖于参数，使用 pm.Potential 添加自定义似然
-            self._build_custom_likelihood(obs_arrays)
+                if obs_arrays is None:
+                    raise ValueError("无法使用先验均值运行模型，请检查模型配置")
+
+                # 4. 通过 pm.Potential + 自定义 Op 注册似然
+                self._build_custom_likelihood(obs_arrays)
 
         self.model = model_context
         logger.info("PyMC 模型构建完成")
@@ -250,29 +273,28 @@ class MCMCCalibrator:
     def _build_custom_likelihood(self, obs_arrays: Dict[str, np.ndarray]):
         """构建自定义似然函数
 
-        使用 pm.Potential 添加自定义 log-likelihood
+        使用 pm.Potential + 自定义 PyTensor Op 添加黑箱 log-likelihood，
+        将纯 Python 模型与 PyMC 计算图耦合。
         """
-        # 定义一个自定义的 log-likelihood 函数
-        def logp_func(**param_values):
-            # 构建完整参数字典
-            params = self.fixed_params.copy()
-            params.update(param_values)
+        target_columns = self.target_columns
+        fixed_params = self.fixed_params
+        param_names = self.param_names
 
-            # 运行模型
+        # 定义 log-likelihood 函数（接收参数向量）
+        def logp_fn(param_vector: np.ndarray) -> float:
+            params = dict(fixed_params)
+            params.update(dict(zip(param_names, param_vector)))
+
             _, sim_arrays = self._prepare_data_for_model(params)
 
             if sim_arrays is None:
-                return -1e10  # 模型失败时返回极小的 log-likelihood
+                return -1e10  # 模型失败时返回极小值
 
-            # 计算 log-likelihood
-            log_likelihood = 0
-            for target in self.target_columns:
+            log_likelihood = 0.0
+            for target in target_columns:
                 if target in obs_arrays and target in sim_arrays:
                     obs = obs_arrays[target]
                     sim = sim_arrays[target]
-
-                    # 简单的 Gaussian log-likelihood
-                    # 假设标准差为数据范围的 5%
                     sigma = (obs.max() - obs.min()) * 0.05
                     if sigma > 0:
                         log_likelihood += -0.5 * np.sum(((obs - sim) / sigma) ** 2)
@@ -280,9 +302,11 @@ class MCMCCalibrator:
 
             return log_likelihood
 
-        # 使用 pm.Potential 添加自定义似然
-        # 注意：这需要 PyMC 支持自定义函数
-        # 这里使用简化的方法，在采样时计算似然
+        # 将先验参数堆叠为向量，传入自定义 Op
+        param_vector = pm.math.stack([self._priors[p] for p in param_names])
+        logl_op = _BlackBoxLogLikelihoodOp(logp_fn)
+        logl = logl_op(param_vector)
+        pm.Potential('log_likelihood', logl)
 
     def sample(self,
                n_tunes: int = 1000,
@@ -315,19 +339,19 @@ class MCMCCalibrator:
 
         start_time = time.time()
 
-        with self.model:
-            # 使用自定义采样器
-            # 由于模型是纯 Python 函数，使用 Metropolis 或简单的采样方法
-            self.trace = pm.sample(
-                tune=n_tunes,
-                draws=n_draws,
-                chains=n_chains,
-                cores=cores,
-                target_accept=target_accept,
-                return_inferencedata=True,
-                progressbar=True,
-                random_seed=42,
-            )
+        with warnings.catch_warnings():
+            warnings.filterwarnings('ignore', category=_PMC_WARNING_CATEGORIES)
+            with self.model:
+                self.trace = pm.sample(
+                    tune=n_tunes,
+                    draws=n_draws,
+                    chains=n_chains,
+                    cores=cores,
+                    target_accept=target_accept,
+                    return_inferencedata=True,
+                    progressbar=True,
+                    random_seed=42,
+                )
 
         elapsed = time.time() - start_time
 
