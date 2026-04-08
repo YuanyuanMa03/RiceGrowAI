@@ -2377,7 +2377,8 @@ def show_sidebar_content(cultivar_df):
                 time.sleep(SECONDS_TO_WAIT)
                 st.rerun()
             except Exception as e:
-                st.error(f"❌ 清除文件时出错: {e}").mkdir(parents=True, exist_ok=True)
+                st.error(f"❌ 清除文件时出错: {e}")
+                Path(upload_dir).mkdir(parents=True, exist_ok=True)
 
     # 数据文件检查 - 紧凑版
     st.markdown("""
