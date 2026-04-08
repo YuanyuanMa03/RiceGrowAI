@@ -126,31 +126,6 @@ ERROR_MESSAGES = {
     'missing_files': "❌ 缺少必需的数据文件: {files}",
 }
 
-# ===== 自定义异常类 =====
-class RiceSimulationError(Exception):
-    """水稻模拟基础异常类"""
-    pass
-
-
-class FileReadError(RiceSimulationError):
-    """文件读取错误"""
-    pass
-
-
-class EncodingError(RiceSimulationError):
-    """编码错误"""
-    pass
-
-
-class ValidationError(RiceSimulationError):
-    """验证错误"""
-    pass
-
-
-class SimulationError(RiceSimulationError):
-    """模拟运行错误"""
-    pass
-
 # ===== 路径工具函数 =====
 def get_data_path(filename: str) -> Path:
     """获取数据文件路径

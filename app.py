@@ -71,11 +71,12 @@ from config import (
     PANDAS_ILON_FIRST_ROW,
     setup_application_logging,
     safe_join_path,
+)
+# Exceptions from unified hierarchy
+from core.exceptions import (
     FileReadError,
     EncodingError,
     ValidationError,
-    SimulationError,
-    RiceSimulationError
 )
 
 # 初始化日志系统

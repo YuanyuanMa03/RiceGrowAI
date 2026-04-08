@@ -19,12 +19,8 @@ logger = logging.getLogger('rice_app')
 # 导入配置和异常
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-from config import (
-    DATA_DIR,
-    ENCODING_FALLBACK,
-    FileReadError,
-    EncodingError as ConfigEncodingError
-)
+from config import DATA_DIR, ENCODING_FALLBACK
+from core.exceptions import FileReadError
 
 
 @dataclass
