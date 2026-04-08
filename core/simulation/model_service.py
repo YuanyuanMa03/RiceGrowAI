@@ -122,10 +122,12 @@ class ModelService:
         Returns:
             临时文件路径
         """
+        import os
         import tempfile
 
         # 创建临时文件
         fd, temp_path = tempfile.mkstemp(suffix='.csv', text=True)
+        os.close(fd)  # 关闭mkstemp返回的fd，pandas.to_csv会自己打开文件
         temp_path = Path(temp_path)
 
         try:
@@ -155,7 +157,7 @@ class ModelService:
             # 清理失败的临时文件
             try:
                 temp_path.unlink()
-            except:
+            except Exception:
                 pass
             raise ModelRunError(f"创建临时品种文件失败: {e}")
 
@@ -217,43 +219,44 @@ class ModelService:
             # 创建临时品种文件
             cultivar_path = self._create_temp_cultivar_file(params, variety_name)
 
-            # 导入模型
-            from models.Ricegrow_py_v1_0 import CalFun
-
-            # 运行模型
-            results = CalFun(
-                FieldPath=str(self.data_dir / '调参数据.csv'),
-                WeatherPath=str(self.data_dir / '气象数据.csv'),
-                SoilFieldPath=str(self.data_dir / '土壤数据.csv'),
-                ResiduePath=str(self.data_dir / '秸秆数据.csv'),
-                PlantingPath=str(self.data_dir / '管理数据_多种方案.csv'),
-                CultivarPath=str(cultivar_path),
-                FertilizerPath=str(self.data_dir / '施肥数据.csv')
-            )
-
-            # 提取结果 (results[4] 是地上部生物量)
-            max_days = len(results[4])
-
-            simulated = pd.DataFrame({
-                'DAT': range(1, max_days + 1),
-                'Biomass': results[4],
-                'LAI': results[1],
-                'RootW': results[0],
-                'LN': results[2] if len(results) > 2 else None,
-                'ST': results[3] if len(results) > 3 else None,
-            })
-
-            # 清理临时文件
             try:
-                cultivar_path.unlink()
-            except:
-                pass
+                # 导入模型
+                from models.Ricegrow_py_v1_0 import CalFun
 
-            return SimulationResult(
-                data=simulated,
-                success=True,
-                warnings=[]
-            )
+                # 运行模型
+                results = CalFun(
+                    FieldPath=str(self.data_dir / '调参数据.csv'),
+                    WeatherPath=str(self.data_dir / '气象数据.csv'),
+                    SoilFieldPath=str(self.data_dir / '土壤数据.csv'),
+                    ResiduePath=str(self.data_dir / '秸秆数据.csv'),
+                    PlantingPath=str(self.data_dir / '管理数据_多种方案.csv'),
+                    CultivarPath=str(cultivar_path),
+                    FertilizerPath=str(self.data_dir / '施肥数据.csv')
+                )
+
+                # 提取结果 (results[4] 是地上部生物量)
+                max_days = len(results[4])
+
+                simulated = pd.DataFrame({
+                    'DAT': range(1, max_days + 1),
+                    'Biomass': results[4],
+                    'LAI': results[1],
+                    'RootW': results[0],
+                    'LN': results[2] if len(results) > 2 else None,
+                    'ST': results[3] if len(results) > 3 else None,
+                })
+
+                return SimulationResult(
+                    data=simulated,
+                    success=True,
+                    warnings=[]
+                )
+            finally:
+                # 确保临时文件在模型运行后（无论成功或失败）被清理
+                try:
+                    cultivar_path.unlink()
+                except Exception:
+                    pass
 
         except ParameterError as e:
             # 参数错误，不需要记录日志

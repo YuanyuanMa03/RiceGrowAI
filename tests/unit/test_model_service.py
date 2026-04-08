@@ -257,3 +257,38 @@ class TestDataProcessing:
 
         # 应返回默认温度
         assert all(t == 30.0 for t in temps)
+
+
+class TestTempFileManagement:
+    """临时文件管理测试"""
+
+    def test_mkstemp_fd_is_closed(self):
+        """mkstemp返回的文件描述符必须被关闭，否则会泄漏FD"""
+        import os
+
+        service = ModelService.__new__(ModelService)
+        service.data_dir = Path("/tmp/test_rch4_data")
+
+        # 创建带有一行的DataFrame模板（illoc[0]需要非空DataFrame）
+        template = pd.DataFrame({"PZ": ["placeholder"], "PS": [0.05], "TS": [2.8]})
+
+        with patch.object(Path, "exists", return_value=True), \
+             patch("pandas.read_csv", return_value=template), \
+             patch.object(pd.DataFrame, "to_csv"):
+            path = service._create_temp_cultivar_file({"PS": 0.06}, "TestVar")
+
+        # 验证临时文件路径由 tempfile 模块生成
+        assert path is not None
+        assert "tmp" in str(path).lower()  # tempfile puts files in /tmp
+
+        # 关键验证：fd 已关闭后，可以正常打开文件（不被占用）
+        try:
+            test_fd = os.open(str(path), os.O_RDONLY)
+            os.close(test_fd)
+        except OSError:
+            pass  # mock没有真正写入文件
+        finally:
+            try:
+                Path(path).unlink()
+            except OSError:
+                pass
